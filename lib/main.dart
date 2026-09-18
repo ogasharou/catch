@@ -259,6 +259,302 @@ class CalendarEntry {
 // メイン画面
 // ============================================================
 
+
+class OcrConfirmationResult {
+  OcrConfirmationResult({
+    required this.title,
+    required this.subject,
+    required this.deadline,
+    required this.saveTarget,
+  });
+
+  final String title;
+  final String subject;
+  final DateTime deadline;
+  final String saveTarget;
+}
+
+class OcrConfirmationPage extends StatefulWidget {
+  const OcrConfirmationPage({
+    super.key,
+    required this.initialTitle,
+    required this.initialSubject,
+    required this.initialDeadline,
+    required this.initialSaveTarget,
+    required this.hasExplicitTime,
+    required this.rawText,
+    required this.isTeamsAssignment,
+  });
+
+  final String initialTitle;
+  final String initialSubject;
+  final DateTime initialDeadline;
+  final String initialSaveTarget;
+  final bool hasExplicitTime;
+  final String rawText;
+  final bool isTeamsAssignment;
+
+  @override
+  State<OcrConfirmationPage> createState() => _OcrConfirmationPageState();
+}
+
+class _OcrConfirmationPageState extends State<OcrConfirmationPage> {
+  late final TextEditingController titleController;
+  late final TextEditingController subjectController;
+  late DateTime deadline;
+  late String saveTarget;
+  late bool hasExplicitTime;
+
+  @override
+  void initState() {
+    super.initState();
+    titleController = TextEditingController(text: widget.initialTitle);
+    subjectController = TextEditingController(text: widget.initialSubject);
+    deadline = widget.initialDeadline;
+    saveTarget = widget.initialSaveTarget;
+    hasExplicitTime = widget.hasExplicitTime;
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    subjectController.dispose();
+    super.dispose();
+  }
+
+  String formatDateTimeLocal(DateTime value) {
+    final y = value.year.toString().padLeft(4, '0');
+    final m = value.month.toString().padLeft(2, '0');
+    final d = value.day.toString().padLeft(2, '0');
+    final h = value.hour.toString().padLeft(2, '0');
+    final min = value.minute.toString().padLeft(2, '0');
+    return '$y/$m/$d $h:$min';
+  }
+
+  Future<void> pickDeadline() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    final date = await showDatePicker(
+      context: context,
+      initialDate: deadline,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(deadline),
+    );
+    if (time == null || !mounted) return;
+
+    setState(() {
+      deadline = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+      hasExplicitTime = true;
+    });
+  }
+
+  void save() {
+    final title = titleController.text.trim();
+    if (title.isEmpty || !hasExplicitTime) return;
+
+    Navigator.pop(
+      context,
+      OcrConfirmationResult(
+        title: title,
+        subject: subjectController.text.trim(),
+        deadline: deadline,
+        saveTarget: saveTarget,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('スクショの解析結果を確認'),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.manual,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF2F3FF),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        '読み取り結果は間違う可能性があります。内容を確認し、必要なら修正してください。',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    if (widget.isTeamsAssignment) ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Teams課題：締切は「期限」を優先し、提出時刻は除外しています。',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+
+                    TextField(
+                      controller: titleController,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText:
+                            saveTarget == 'task' ? '課題名' : '予定名',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    TextField(
+                      controller: subjectController,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText:
+                            saveTarget == 'task' ? '教科' : '分類・メモ',
+                        hintText: saveTarget == 'task' && subjectController.text.trim().isEmpty
+                            ? '教科名を確認してください'
+                            : null,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.event),
+                        title: Text(
+                          saveTarget == 'task' ? '締切日時' : '予定日時',
+                        ),
+                        subtitle: Text(
+                          hasExplicitTime
+                              ? formatDateTimeLocal(deadline)
+                              : '${formatDateTimeLocal(deadline)}（時刻を確認）',
+                        ),
+                        trailing:
+                            const Icon(Icons.edit_calendar_outlined),
+                        onTap: pickDeadline,
+                      ),
+                    ),
+                    if (!hasExplicitTime)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(
+                          '時間を確定できなかったので、日時をタップして選んでください。',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    const SizedBox(height: 18),
+
+                    const Text(
+                      '登録先',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment<String>(
+                          value: 'task',
+                          label: Text('タスク'),
+                          icon: Icon(Icons.task_alt),
+                        ),
+                        ButtonSegment<String>(
+                          value: 'schedule',
+                          label: Text('予定'),
+                          icon: Icon(Icons.event),
+                        ),
+                      ],
+                      selected: {saveTarget},
+                      onSelectionChanged: (values) {
+                        setState(() => saveTarget = values.first);
+                      },
+                    ),
+                    const SizedBox(height: 18),
+
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: const Text(
+                        '読み取った文字を確認',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      children: [
+                        SelectableText(
+                          widget.rawText,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 100),
+                  ],
+                ),
+              ),
+            ),
+
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                boxShadow: const [
+                  BoxShadow(
+                    blurRadius: 8,
+                    offset: Offset(0, -2),
+                    color: Color(0x16000000),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('キャンセル'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton(
+                      onPressed: hasExplicitTime ? save : null,
+                      child: Text(
+                        saveTarget == 'task'
+                            ? 'タスクに追加'
+                            : '予定に追加',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -992,40 +1288,139 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
 
     String cleanTeamsCourseName(String raw) {
-      var value = raw.trim();
+      var value = raw
+          .replaceAll('…', '...')
+          .replaceAll('：', ':')
+          .trim();
 
-      // [001]生産システム実習基礎_R08
-      // -> 生産システム実習基礎
+      // Remove leading Teams course code.
       value = value.replaceFirst(
-        RegExp(r'^[\[【]\s*\d+\s*[\]】]\s*'),
+        RegExp(r'^[\[【(（]?\s*\d{2,5}\s*[\]】)）]?\s*'),
         '',
       );
+
+      // Remove common year/class suffixes such as "_R08".
       value = value.replaceFirst(
         RegExp(r'[_\-\s]+R?\d{1,4}$', caseSensitive: false),
         '',
       );
-      return value.trim();
+
+      // OCR often leaves UI ellipsis on the course title.
+      value = value.replaceFirst(RegExp(r'\.{2,}$'), '');
+
+      // Mild normalization only for clearly truncated Japanese words visible
+      // in the Teams app bar.
+      if (value.endsWith('プログラミン')) {
+        value = '${value}グ';
+      }
+
+      value = value
+          .replaceAll(RegExp(r'^[\-_・:：\s]+'), '')
+          .replaceAll(RegExp(r'[\-_・:：\s]+$'), '')
+          .trim();
+
+      return value;
+    }
+
+    bool looksLikeCourseCandidate(String raw) {
+      final value = cleanTeamsCourseName(raw);
+      if (value.length < 3 || value.length > 60) return false;
+      if (!RegExp(r'[一-龠ぁ-んァ-ヶA-Za-z]').hasMatch(value)) return false;
+
+      if (RegExp(
+        r'(期限|提出|点数|手順|終了日|自分の作業|参考資料|複数回提出|'
+        r'添付|新規|課題名|締切日時|登録先|キャンセル|提出を取り消す|'
+        r'遅れて提出する|提出されていません)',
+      ).hasMatch(value)) {
+        return false;
+      }
+
+      if (RegExp(
+        r'\.(pdf|pptx?|xlsx?|docx?|zip|png|jpe?g)$',
+        caseSensitive: false,
+      ).hasMatch(value)) {
+        return false;
+      }
+
+      return true;
+    }
+
+    int courseScore(String raw, int index) {
+      final value = cleanTeamsCourseName(raw);
+      var score = 0;
+
+      // Teams course names are normally in the very top app bar.
+      if (index <= 2) score += 40;
+      if (index <= 5) score += 15;
+
+      // Explicit Teams course code is extremely strong evidence.
+      if (RegExp(r'^[\[【(（]?\s*\d{2,5}\s*[\]】)）]?').hasMatch(raw)) {
+        score += 45;
+      }
+
+      // Typical school-course words.
+      if (RegExp(
+        r'(実習|基礎|情報|システム|プログラミング|数学|英語|物理|化学|国語|'
+        r'歴史|体育|工学|電気|電子|機械|生産|設計|コース|講義|授業)',
+      ).hasMatch(value)) {
+        score += 20;
+      }
+
+      // Course-like class labels such as 2S-J.
+      if (RegExp(r'\b\d[A-Za-z](?:-[A-Za-z])?\b').hasMatch(value)) {
+        score += 18;
+      }
+
+      // Assignment content is less likely to be a course name.
+      if (RegExp(
+        r'(課題|設計書の作成|夏休み|f-\d|レポート|小テスト|提出物)',
+        caseSensitive: false,
+      ).hasMatch(value)) {
+        score -= 35;
+      }
+
+      return score;
     }
 
     String subject = '';
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i];
 
-      if (courseLine.hasMatch(line)) {
-        subject = cleanTeamsCourseName(line);
-        break;
+    // Build candidates from the first several OCR lines. The Teams course
+    // label is visually at the top, so position is important.
+    final courseCandidates = <({String text, int index, int score})>[];
+
+    final topLimit = lines.length < 12 ? lines.length : 12;
+    for (var i = 0; i < topLimit; i++) {
+      final raw = lines[i];
+
+      // Full line such as:
+      // [001]生産システム実習基礎_R08
+      // [001]2S-J_プログラミン...
+      if (looksLikeCourseCandidate(raw)) {
+        courseCandidates.add((
+          text: cleanTeamsCourseName(raw),
+          index: i,
+          score: courseScore(raw, i),
+        ));
       }
 
-      // Web OCR can split the class code and class name onto separate lines.
-      if (RegExp(r'^[\[【]?\s*\d{3,4}\s*[\]】]?$').hasMatch(line) &&
-          i + 1 < lines.length) {
-        final next = lines[i + 1];
-        if (RegExp(r'[一-龠ぁ-んァ-ヶA-Za-z]').hasMatch(next) &&
-            !RegExp(r'(期限|提出|点数|手順|終了日)').hasMatch(next)) {
-          subject = cleanTeamsCourseName(next);
-          break;
+      // OCR can split "[001]" and course name into separate lines.
+      if (RegExp(r'^[\[【(（]?\s*\d{2,5}\s*[\]】)）]?$').hasMatch(raw) &&
+          i + 1 < topLimit) {
+        final joinedRaw = '$raw ${lines[i + 1]}';
+        final joined = cleanTeamsCourseName(joinedRaw);
+        if (looksLikeCourseCandidate(joined)) {
+          courseCandidates.add((
+            text: joined,
+            index: i,
+            score: courseScore(joinedRaw, i) + 20,
+          ));
         }
       }
+    }
+
+    if (courseCandidates.isNotEmpty) {
+      courseCandidates.sort((a, b) => b.score.compareTo(a.score));
+      subject = courseCandidates.first.text;
     }
 
     // Teams places the assignment title immediately before the "期限" area.
@@ -1039,7 +1434,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
 
     bool validTitleLine(String line) {
-      if (line == subject) return false;
+      final normalized = cleanTeamsCourseName(line);
+      if (normalized == subject) return false;
       if (ignored.hasMatch(line)) return false;
       if (teamsUi.hasMatch(line)) return false;
       if (numericOnly.hasMatch(line)) return false;
@@ -1048,6 +1444,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       if (RegExp(r'(提出しました|提出されていません|点満点|複数回提出)').hasMatch(line)) {
         return false;
       }
+
+      // Never use a course-code line as the assignment title.
+      if (RegExp(r'^[\[【(（]?\s*\d{2,5}\s*[\]】)）]?').hasMatch(line) &&
+          looksLikeCourseCandidate(line)) {
+        return false;
+      }
+
       return RegExp(r'[一-龠ぁ-んァ-ヶA-Za-z]').hasMatch(line);
     }
 
@@ -1146,238 +1549,33 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     if (!mounted) return;
 
-    final shouldSave = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    FocusManager.instance.primaryFocus?.unfocus();
 
-          return AnimatedPadding(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            padding: EdgeInsets.only(bottom: bottomInset),
-            child: FractionallySizedBox(
-              heightFactor: 0.92,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'スクショの解析結果を確認',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF2F3FF),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Text(
-                                '読み取り結果は間違う可能性があります。名前・カテゴリ・日時を確認し、必要なら修正してから追加してください。',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
-                            if (looksLikeTeamsAssignmentText(sourceText)) ...[
-                              const SizedBox(height: 10),
-                              const Text(
-                                'Teams課題：締切は「期限」を優先し、提出時刻は除外しています。',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 16),
-
-                            // Put the editable values first so they are visible
-                            // immediately on small iPhone screens.
-                            TextField(
-                              controller: titleController,
-                              textInputAction: TextInputAction.next,
-                              decoration: InputDecoration(
-                                labelText:
-                                    saveTarget == 'task' ? '課題名' : '予定名',
-                                border: const OutlineInputBorder(),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-
-                            TextField(
-                              controller: subjectController,
-                              textInputAction: TextInputAction.done,
-                              decoration: InputDecoration(
-                                labelText: saveTarget == 'task'
-                                    ? '教科'
-                                    : '分類・メモ（任意）',
-                                border: const OutlineInputBorder(),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-
-                            Card(
-                              margin: EdgeInsets.zero,
-                              child: ListTile(
-                                leading: const Icon(Icons.event),
-                                title: Text(
-                                  saveTarget == 'task' ? '締切日時' : '予定日時',
-                                ),
-                                subtitle: Text(
-                                  hasExplicitOcrTime
-                                      ? formatDateTime(deadline)
-                                      : '${formatDateTime(deadline)}（時刻を確認してください）',
-                                ),
-                                trailing:
-                                    const Icon(Icons.edit_calendar_outlined),
-                                onTap: () async {
-                                  FocusScope.of(dialogContext).unfocus();
-
-                                  final date = await showDatePicker(
-                                    context: dialogContext,
-                                    initialDate: deadline,
-                                    firstDate: DateTime(2000),
-                                    lastDate: DateTime.now()
-                                        .add(const Duration(days: 3650)),
-                                  );
-                                  if (date == null ||
-                                      !dialogContext.mounted) {
-                                    return;
-                                  }
-
-                                  final time = await showTimePicker(
-                                    context: dialogContext,
-                                    initialTime:
-                                        TimeOfDay.fromDateTime(deadline),
-                                  );
-                                  if (time == null) return;
-
-                                  setDialogState(() {
-                                    deadline = DateTime(
-                                      date.year,
-                                      date.month,
-                                      date.day,
-                                      time.hour,
-                                      time.minute,
-                                    );
-                                    hasExplicitOcrTime = true;
-                                  });
-                                },
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-                            const Text(
-                              '登録先',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 7),
-                            SegmentedButton<String>(
-                              segments: const [
-                                ButtonSegment<String>(
-                                  value: 'task',
-                                  label: Text('タスク'),
-                                  icon: Icon(Icons.task_alt),
-                                ),
-                                ButtonSegment<String>(
-                                  value: 'schedule',
-                                  label: Text('予定'),
-                                  icon: Icon(Icons.event),
-                                ),
-                              ],
-                              selected: {saveTarget},
-                              onSelectionChanged: (value) {
-                                setDialogState(
-                                  () => saveTarget = value.first,
-                                );
-                              },
-                            ),
-                            if (!hasExplicitOcrTime)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 8),
-                                child: Text(
-                                  '時間が画面から確定できなかったので、日時をタップして選んでください。',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            const SizedBox(height: 8),
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text(
-                                '読み取った文字を確認',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              children: [
-                                SelectableText(
-                                  rawText,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () =>
-                                Navigator.pop(dialogContext, false),
-                            child: const Text('キャンセル'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: FilledButton(
-                            onPressed: hasExplicitOcrTime
-                                ? () => Navigator.pop(dialogContext, true)
-                                : null,
-                            child: Text(
-                              saveTarget == 'task'
-                                  ? 'タスクに追加'
-                                  : '予定に追加',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
+    final confirmation = await Navigator.of(context).push<OcrConfirmationResult>(
+      MaterialPageRoute(
+        builder: (_) => OcrConfirmationPage(
+          initialTitle: titleController.text,
+          initialSubject: subjectController.text,
+          initialDeadline: deadline,
+          initialSaveTarget: saveTarget,
+          hasExplicitTime: hasExplicitOcrTime,
+          rawText: rawText,
+          isTeamsAssignment: isTeamsAssignment,
+        ),
       ),
     );
 
-    if (shouldSave != true || titleController.text.trim().isEmpty) return;
+    if (confirmation == null || confirmation.title.trim().isEmpty) return;
+
+    final confirmedTitle = confirmation.title.trim();
+    final confirmedSubject = confirmation.subject.trim();
+    deadline = confirmation.deadline;
+    saveTarget = confirmation.saveTarget;
+
 
     if (saveTarget == 'schedule') {
       final item = ScheduleItem(
-        title: titleController.text.trim(),
+        title: confirmedTitle,
         date: deadline,
         externalId: 'screen-ocr:${DateTime.now().microsecondsSinceEpoch}',
         reminderMinutes: defaultReminderMinutes,
@@ -1396,10 +1594,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
 
     final item = Assignment(
-      title: titleController.text.trim(),
-      subject: subjectController.text.trim().isEmpty
+      title: confirmedTitle,
+      subject: confirmedSubject.isEmpty
           ? '画面からCatch'
-          : subjectController.text.trim(),
+          : confirmedSubject,
       deadline: deadline,
       reminderMinutes: defaultReminderMinutes,
       notificationId: newNotificationId(),
@@ -3785,7 +3983,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
         Center(
           child: Text(
-            'Catch v0.38',
+            'Catch v0.40',
             style: TextStyle(
               color: Colors.grey.shade600,
             ),
