@@ -1,0 +1,7 @@
+Catch v0.37 Mobile OCR Confirmation UI
+- Replaced the cramped OCR dialog with a 92%-height bottom sheet.
+- Keyboard-safe layout for iPhone/PWA.
+- Form scrolls while action buttons remain visible.
+- Task/event name, category, date and time stay editable.
+- Raw OCR text stays collapsible.
+- Android/PWA OCR logic is unchanged.

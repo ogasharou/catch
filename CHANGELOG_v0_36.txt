@@ -1,7 +1,0 @@
-Catch v0.36 PWA Catch Button Fix
-- Fixed the PWA/iPhone home card so it no longer blocks Screen Catch on web.
-- PWA now shows "スクショからCatch".
-- PWA button now says "画像を選ぶ".
-- Pressing it opens the screenshot/photo picker and runs Web OCR.
-- Android overlay Catch behavior is unchanged.
-- GitHub Pages deployment and Android APK build support are preserved.

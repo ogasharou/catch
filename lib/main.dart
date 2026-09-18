@@ -1113,153 +1113,224 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         false;
     var saveTarget = inferOcrSaveTarget(sourceText);
 
-    final shouldSave = await showDialog<bool>(
+    final shouldSave = await showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('スクショの解析結果を確認'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF2F3FF),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    '読み取り結果は間違う可能性があります。名前・カテゴリ・日時を確認し、必要なら修正してから追加してください。',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-                if (looksLikeTeamsAssignmentText(sourceText)) ...[
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Teams課題として解析：締切は「期限」を最優先し、「提出しました」の日時は除外しています。',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                const Text(
-                  'カテゴリ',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 7),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment<String>(
-                      value: 'task',
-                      label: Text('タスク'),
-                      icon: Icon(Icons.task_alt),
-                    ),
-                    ButtonSegment<String>(
-                      value: 'schedule',
-                      label: Text('予定'),
-                      icon: Icon(Icons.event),
-                    ),
-                  ],
-                  selected: {saveTarget},
-                  onSelectionChanged: (value) {
-                    setDialogState(() => saveTarget = value.first);
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: titleController,
-                  decoration: InputDecoration(
-                    labelText: saveTarget == 'task' ? 'タスク名' : '予定名',
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: subjectController,
-                  decoration: InputDecoration(
-                    labelText: saveTarget == 'task'
-                        ? '教科・分類'
-                        : '分類・メモ（任意）',
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.event),
-                  title: Text(saveTarget == 'task' ? '締切日時' : '予定日時'),
-                  subtitle: Text(
-                    hasExplicitOcrTime
-                        ? formatDateTime(deadline)
-                        : '${formatDateTime(deadline)}（時刻を確認してください）',
-                  ),
-                  trailing: const Icon(Icons.edit_calendar_outlined),
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: dialogContext,
-                      initialDate: deadline,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime.now().add(const Duration(days: 3650)),
-                    );
-                    if (date == null || !dialogContext.mounted) return;
-                    final time = await showTimePicker(
-                      context: dialogContext,
-                      initialTime: TimeOfDay.fromDateTime(deadline),
-                    );
-                    if (time == null) return;
-                    setDialogState(() {
-                      deadline = DateTime(
-                        date.year,
-                        date.month,
-                        date.day,
-                        time.hour,
-                        time.minute,
-                      );
-                      hasExplicitOcrTime = true;
-                    });
-                  },
-                ),
-                if (!hasExplicitOcrTime)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      '時間が画面から確定できなかったので、日時をタップして選んでください。',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  title: const Text('読み取った文字を確認'),
+        builder: (context, setDialogState) {
+          final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+          return AnimatedPadding(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            padding: EdgeInsets.only(bottom: bottomInset),
+            child: FractionallySizedBox(
+              heightFactor: 0.92,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SelectableText(rawText, style: const TextStyle(fontSize: 12)),
+                    const Text(
+                      'スクショの解析結果を確認',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF2F3FF),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Text(
+                                '読み取り結果は間違う可能性があります。名前・カテゴリ・日時を確認し、必要なら修正してから追加してください。',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            if (looksLikeTeamsAssignmentText(sourceText)) ...[
+                              const SizedBox(height: 10),
+                              const Text(
+                                'Teams課題として解析：締切は「期限」を最優先し、「提出しました」の日時は除外しています。',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            const Text(
+                              'カテゴリ',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 7),
+                            SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment<String>(
+                                  value: 'task',
+                                  label: Text('タスク'),
+                                  icon: Icon(Icons.task_alt),
+                                ),
+                                ButtonSegment<String>(
+                                  value: 'schedule',
+                                  label: Text('予定'),
+                                  icon: Icon(Icons.event),
+                                ),
+                              ],
+                              selected: {saveTarget},
+                              onSelectionChanged: (value) {
+                                setDialogState(
+                                  () => saveTarget = value.first,
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: titleController,
+                              textInputAction: TextInputAction.next,
+                              decoration: InputDecoration(
+                                labelText:
+                                    saveTarget == 'task' ? 'タスク名' : '予定名',
+                                border: const OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: subjectController,
+                              textInputAction: TextInputAction.done,
+                              decoration: InputDecoration(
+                                labelText: saveTarget == 'task'
+                                    ? '教科・分類'
+                                    : '分類・メモ（任意）',
+                                border: const OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Card(
+                              margin: EdgeInsets.zero,
+                              child: ListTile(
+                                leading: const Icon(Icons.event),
+                                title: Text(
+                                  saveTarget == 'task' ? '締切日時' : '予定日時',
+                                ),
+                                subtitle: Text(
+                                  hasExplicitOcrTime
+                                      ? formatDateTime(deadline)
+                                      : '${formatDateTime(deadline)}（時刻を確認してください）',
+                                ),
+                                trailing:
+                                    const Icon(Icons.edit_calendar_outlined),
+                                onTap: () async {
+                                  FocusScope.of(dialogContext).unfocus();
+
+                                  final date = await showDatePicker(
+                                    context: dialogContext,
+                                    initialDate: deadline,
+                                    firstDate: DateTime(2000),
+                                    lastDate: DateTime.now()
+                                        .add(const Duration(days: 3650)),
+                                  );
+                                  if (date == null ||
+                                      !dialogContext.mounted) {
+                                    return;
+                                  }
+
+                                  final time = await showTimePicker(
+                                    context: dialogContext,
+                                    initialTime:
+                                        TimeOfDay.fromDateTime(deadline),
+                                  );
+                                  if (time == null) return;
+
+                                  setDialogState(() {
+                                    deadline = DateTime(
+                                      date.year,
+                                      date.month,
+                                      date.day,
+                                      time.hour,
+                                      time.minute,
+                                    );
+                                    hasExplicitOcrTime = true;
+                                  });
+                                },
+                              ),
+                            ),
+                            if (!hasExplicitOcrTime)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: Text(
+                                  '時間が画面から確定できなかったので、日時をタップして選んでください。',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            const SizedBox(height: 8),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text(
+                                '読み取った文字を確認',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              children: [
+                                SelectableText(
+                                  rawText,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () =>
+                                Navigator.pop(dialogContext, false),
+                            child: const Text('キャンセル'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: FilledButton(
+                            onPressed: hasExplicitOcrTime
+                                ? () => Navigator.pop(dialogContext, true)
+                                : null,
+                            child: Text(
+                              saveTarget == 'task'
+                                  ? 'タスクに追加'
+                                  : '予定に追加',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('キャンセル'),
-            ),
-            FilledButton(
-              onPressed: hasExplicitOcrTime
-                  ? () => Navigator.pop(dialogContext, true)
-                  : null,
-              child: Text(
-                saveTarget == 'task'
-                    ? '確認してタスクに追加'
-                    : '確認して予定に追加',
               ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
 
@@ -3675,7 +3746,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
         Center(
           child: Text(
-            'Catch v0.36',
+            'Catch v0.37',
             style: TextStyle(
               color: Colors.grey.shade600,
             ),
