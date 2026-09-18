@@ -1,0 +1,33 @@
+Catch v0.23 iPhone対応
+
+iPhone版の画面Catch:
+Androidのような他アプリ上の常駐ボタンはiOSでは使えないため、
+iPhoneでは「スクショからCatch」→ 写真からスクリーンショットを選択 → OCR → 確認 → 追加
+という流れです。
+
+確認画面では:
+- タスク / 予定を選択
+- 名前を修正
+- 教科・分類を修正（タスク時）
+- 日付・時間を修正
+- 読み取った生テキストを確認
+- 「追加」を押すまで保存しない
+
+MacでiPhone版を準備:
+1. Flutter と Xcode をインストール
+2. このフォルダの setup_ios.command を実行
+3. ios/Runner.xcworkspace をXcodeで開く
+4. Signing & Capabilities で自分のApple Teamを選択
+5. 実機またはSimulatorでRun
+
+WindowsではiOSアプリの最終ビルド/署名はできません。
+ソースはAndroid/iOS共通で動くようにしてあります。
+
+
+v0.24: スクショ解析後は必ず確認画面を表示します。名前・カテゴリ・日時は修正可能で、自動保存はしません。
+
+
+v0.28 天気:
+- iPhoneでも現在地の天気をカレンダーに表示できます。
+- 位置情報は「Appの使用中」のみでOKです。
+- setup_ios.command が NSLocationWhenInUseUsageDescription を自動追加します。

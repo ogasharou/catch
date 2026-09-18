@@ -1,0 +1,36 @@
+{
+  "name": "Catch",
+  "short_name": "Catch",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F7F7FB",
+  "theme_color": "#5B63D3",
+  "description": "タスク・予定・ウォッチ・天気をまとめてCatch",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icons/Icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/Icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/Icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/Icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
