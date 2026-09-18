@@ -991,11 +991,40 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       r'\d{1,2}:\d{2})',
     );
 
+    String cleanTeamsCourseName(String raw) {
+      var value = raw.trim();
+
+      // [001]生産システム実習基礎_R08
+      // -> 生産システム実習基礎
+      value = value.replaceFirst(
+        RegExp(r'^[\[【]\s*\d+\s*[\]】]\s*'),
+        '',
+      );
+      value = value.replaceFirst(
+        RegExp(r'[_\-\s]+R?\d{1,4}$', caseSensitive: false),
+        '',
+      );
+      return value.trim();
+    }
+
     String subject = '';
-    for (final line in lines) {
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+
       if (courseLine.hasMatch(line)) {
-        subject = line;
+        subject = cleanTeamsCourseName(line);
         break;
+      }
+
+      // Web OCR can split the class code and class name onto separate lines.
+      if (RegExp(r'^[\[【]?\s*\d{3,4}\s*[\]】]?$').hasMatch(line) &&
+          i + 1 < lines.length) {
+        final next = lines[i + 1];
+        if (RegExp(r'[一-龠ぁ-んァ-ヶA-Za-z]').hasMatch(next) &&
+            !RegExp(r'(期限|提出|点数|手順|終了日)').hasMatch(next)) {
+          subject = cleanTeamsCourseName(next);
+          break;
+        }
       }
     }
 
@@ -1113,6 +1142,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         false;
     var saveTarget = inferOcrSaveTarget(sourceText);
 
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) return;
+
     final shouldSave = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -1163,7 +1196,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             if (looksLikeTeamsAssignmentText(sourceText)) ...[
                               const SizedBox(height: 10),
                               const Text(
-                                'Teams課題として解析：締切は「期限」を最優先し、「提出しました」の日時は除外しています。',
+                                'Teams課題：締切は「期限」を優先し、提出時刻は除外しています。',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
@@ -1171,56 +1204,32 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                               ),
                             ],
                             const SizedBox(height: 16),
-                            const Text(
-                              'カテゴリ',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 7),
-                            SegmentedButton<String>(
-                              segments: const [
-                                ButtonSegment<String>(
-                                  value: 'task',
-                                  label: Text('タスク'),
-                                  icon: Icon(Icons.task_alt),
-                                ),
-                                ButtonSegment<String>(
-                                  value: 'schedule',
-                                  label: Text('予定'),
-                                  icon: Icon(Icons.event),
-                                ),
-                              ],
-                              selected: {saveTarget},
-                              onSelectionChanged: (value) {
-                                setDialogState(
-                                  () => saveTarget = value.first,
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 16),
+
+                            // Put the editable values first so they are visible
+                            // immediately on small iPhone screens.
                             TextField(
                               controller: titleController,
                               textInputAction: TextInputAction.next,
                               decoration: InputDecoration(
                                 labelText:
-                                    saveTarget == 'task' ? 'タスク名' : '予定名',
+                                    saveTarget == 'task' ? '課題名' : '予定名',
                                 border: const OutlineInputBorder(),
                               ),
                             ),
                             const SizedBox(height: 12),
+
                             TextField(
                               controller: subjectController,
                               textInputAction: TextInputAction.done,
                               decoration: InputDecoration(
                                 labelText: saveTarget == 'task'
-                                    ? '教科・分類'
+                                    ? '教科'
                                     : '分類・メモ（任意）',
                                 border: const OutlineInputBorder(),
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 12),
+
                             Card(
                               margin: EdgeInsets.zero,
                               child: ListTile(
@@ -1269,6 +1278,36 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                                   });
                                 },
                               ),
+                            ),
+
+                            const SizedBox(height: 16),
+                            const Text(
+                              '登録先',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 7),
+                            SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment<String>(
+                                  value: 'task',
+                                  label: Text('タスク'),
+                                  icon: Icon(Icons.task_alt),
+                                ),
+                                ButtonSegment<String>(
+                                  value: 'schedule',
+                                  label: Text('予定'),
+                                  icon: Icon(Icons.event),
+                                ),
+                              ],
+                              selected: {saveTarget},
+                              onSelectionChanged: (value) {
+                                setDialogState(
+                                  () => saveTarget = value.first,
+                                );
+                              },
                             ),
                             if (!hasExplicitOcrTime)
                               const Padding(
@@ -3746,7 +3785,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
         Center(
           child: Text(
-            'Catch v0.37',
+            'Catch v0.38',
             style: TextStyle(
               color: Colors.grey.shade600,
             ),

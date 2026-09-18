@@ -1,0 +1,11 @@
+Catch v0.38 Confirmation Fields Top
+- OCR confirmation now shows the important editable fields first:
+  1. 課題名 / 予定名
+  2. 教科 / 分類
+  3. 締切日時 / 予定日時
+  4. タスク / 予定
+- Keyboard is dismissed before the confirmation sheet opens.
+- Teams course names are cleaned:
+  [001]生産システム実習基礎_R08 -> 生産システム実習基礎
+- Web OCR split-line Teams course headers are also handled.
+- Existing PWA and Android behavior is preserved.
