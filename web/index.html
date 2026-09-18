@@ -17,6 +17,22 @@
   <link rel="manifest" href="manifest.json">
 
   <title>Catch</title>
+
+  <!-- Browser OCR for the free iPhone/PWA build. -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script>
+    window.catchRecognizeImage = async function (dataUrl) {
+      if (!window.Tesseract) {
+        throw new Error('Web OCRの読み込みに失敗しました');
+      }
+      const result = await Tesseract.recognize(dataUrl, 'jpn+eng', {
+        logger: function (m) {
+          if (m && m.status) console.log('[Catch OCR]', m.status, m.progress || '');
+        }
+      });
+      return (result && result.data && result.data.text) ? result.data.text : '';
+    };
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

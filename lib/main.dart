@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'cloud_sync.dart';
+import 'web_ocr_stub.dart' if (dart.library.js_interop) 'web_ocr_web.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -674,24 +675,42 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       );
       if (image == null || !mounted) return;
 
-      final recognizer = TextRecognizer(script: TextRecognitionScript.japanese);
-      try {
-        final input = InputImage.fromFilePath(image.path);
-        final recognized = await recognizer.processImage(input);
-        final text = recognized.text.trim();
-        if (!mounted) return;
-        if (text.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('画像から文字を読み取れませんでした')),
-          );
-          return;
+      String text;
+      if (kIsWeb) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('スクショを読み取り中… 初回は少し時間がかかります'),
+            duration: Duration(seconds: 8),
+          ),
+        );
+        final bytes = await image.readAsBytes();
+        final mime = image.mimeType ?? 'image/png';
+        final dataUrl = 'data:$mime;base64,${base64Encode(bytes)}';
+        text = (await recognizeWebImage(dataUrl)).trim();
+      } else {
+        final recognizer =
+            TextRecognizer(script: TextRecognitionScript.japanese);
+        try {
+          final input = InputImage.fromFilePath(image.path);
+          final recognized = await recognizer.processImage(input);
+          text = recognized.text.trim();
+        } finally {
+          await recognizer.close();
         }
-        await showTeamsOcrConfirmation(text);
-      } finally {
-        await recognizer.close();
       }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      if (text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('画像から文字を読み取れませんでした')),
+        );
+        return;
+      }
+      await showTeamsOcrConfirmation(text);
     } catch (error) {
       if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('スクショの読み取りに失敗しました: $error')),
       );
@@ -3659,7 +3678,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
         Center(
           child: Text(
-            'Catch v0.34',
+            'Catch v0.35',
             style: TextStyle(
               color: Colors.grey.shade600,
             ),

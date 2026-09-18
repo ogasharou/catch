@@ -1,0 +1,6 @@
+Catch v0.35 Free iPhone PWA Web OCR
+- Added browser OCR for iPhone/Safari PWA using Tesseract.js (Japanese + English).
+- Android keeps Google ML Kit OCR.
+- PWA screenshot Catch now reads the selected screenshot, then uses the existing Teams/task/date parser and mandatory confirmation screen.
+- First OCR run may take longer while the browser downloads OCR language data.
+- Weather/PWA/GitHub Pages and Android APK support are preserved.
