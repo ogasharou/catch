@@ -1,0 +1,15 @@
+Catch v0.42 Free iPhone Web Push
+
+- Adds true Web Push notifications for the iPhone PWA.
+- Works while Catch is closed, using the browser Push API + service worker.
+- No Apple Developer Program required.
+- Adds Settings:
+  * iPhone通知を有効にする
+  * テスト通知を送る
+  * 通知サーバー設定
+- Task/schedule reminder times sync automatically to the push backend.
+- Full reminder list is re-synced after edits/deletes.
+- Existing Android local notifications are preserved.
+- Includes a Cloudflare Workers + D1 backend in push_backend/.
+- Free backend checks due reminders every 5 minutes.
+- Keeps v0.41 Teams subject extraction fixes.

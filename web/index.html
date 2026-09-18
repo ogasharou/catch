@@ -36,5 +36,179 @@
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
+
+  <script>
+    // Catch Web Push bridge for Flutter Web.
+    // iPhone/iPad requires the site to be installed to the Home Screen.
+    (function () {
+      const DEVICE_KEY = 'catch_push_device_id_v1';
+
+      function deviceId() {
+        let value = localStorage.getItem(DEVICE_KEY);
+        if (!value) {
+          const bytes = new Uint8Array(24);
+          crypto.getRandomValues(bytes);
+          value = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+          localStorage.setItem(DEVICE_KEY, value);
+        }
+        return value;
+      }
+
+      function baseUrl(value) {
+        return String(value || '').replace(/\/+$/, '');
+      }
+
+      function result(ok, message) {
+        return JSON.stringify({ ok: !!ok, message: String(message || '') });
+      }
+
+      function isStandaloneIos() {
+        const ios = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+        if (!ios) return true;
+        return window.matchMedia('(display-mode: standalone)').matches ||
+          window.navigator.standalone === true;
+      }
+
+      function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding)
+          .replace(/-/g, '+')
+          .replace(/_/g, '/');
+        const rawData = atob(base64);
+        return Uint8Array.from([...rawData].map(ch => ch.charCodeAt(0)));
+      }
+
+      window.catchPushSupported = function () {
+        return !!(
+          window.isSecureContext &&
+          'serviceWorker' in navigator &&
+          'PushManager' in window &&
+          'Notification' in window
+        );
+      };
+
+      window.catchPushStatus = function () {
+        if (!window.catchPushSupported()) return 'unsupported';
+        return Notification.permission || 'default';
+      };
+
+      window.catchPushEnable = async function (apiUrl) {
+        try {
+          if (!window.catchPushSupported()) {
+            return result(false, 'この端末ではWeb Pushを利用できません');
+          }
+          if (!isStandaloneIos()) {
+            return result(false, 'iPhoneではCatchをホーム画面に追加して、ホーム画面のCatchから設定してください');
+          }
+
+          const permission = await Notification.requestPermission();
+          if (permission !== 'granted') {
+            return result(false, '通知が許可されませんでした。iPhoneの設定からCatchの通知を許可してください');
+          }
+
+          const api = baseUrl(apiUrl);
+          const configResponse = await fetch(api + '/vapid-public-key', {
+            method: 'GET',
+            cache: 'no-store',
+          });
+          if (!configResponse.ok) {
+            return result(false, '通知サーバーに接続できません');
+          }
+          const config = await configResponse.json();
+          if (!config.publicKey) {
+            return result(false, '通知サーバーのVAPIDキーが未設定です');
+          }
+
+          // Separate scope avoids replacing Flutter's generated service worker.
+          const swUrl = new URL('catch_push_sw.js', document.baseURI);
+          const pushScope = new URL('catch-push/', document.baseURI).pathname;
+          const registration = await navigator.serviceWorker.register(swUrl, {
+            scope: pushScope,
+          });
+
+          let subscription = await registration.pushManager.getSubscription();
+          if (subscription) {
+            const currentKey = subscription.options?.applicationServerKey;
+            const wanted = urlBase64ToUint8Array(config.publicKey);
+            if (currentKey) {
+              const currentBytes = new Uint8Array(currentKey);
+              const same = currentBytes.length === wanted.length &&
+                currentBytes.every((v, i) => v === wanted[i]);
+              if (!same) {
+                await subscription.unsubscribe();
+                subscription = null;
+              }
+            }
+          }
+
+          if (!subscription) {
+            subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+            });
+          }
+
+          const response = await fetch(api + '/subscribe', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              deviceId: deviceId(),
+              subscription: subscription.toJSON(),
+            }),
+          });
+
+          if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            return result(false, body.message || '通知端末の登録に失敗しました');
+          }
+
+          return result(true, 'iPhone通知：許可済み');
+        } catch (error) {
+          return result(false, '通知の有効化に失敗しました: ' + (error?.message || error));
+        }
+      };
+
+      window.catchPushSync = async function (apiUrl, remindersJson) {
+        try {
+          const api = baseUrl(apiUrl);
+          const reminders = JSON.parse(remindersJson || '[]');
+          const response = await fetch(api + '/reminders/sync', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              deviceId: deviceId(),
+              reminders,
+            }),
+          });
+          if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            return result(false, body.message || '通知予定の同期に失敗しました');
+          }
+          return result(true, '通知予定を同期しました');
+        } catch (error) {
+          return result(false, '通知予定の同期に失敗しました: ' + (error?.message || error));
+        }
+      };
+
+      window.catchPushTest = async function (apiUrl) {
+        try {
+          const api = baseUrl(apiUrl);
+          const response = await fetch(api + '/test', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ deviceId: deviceId() }),
+          });
+          const body = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            return result(false, body.message || 'テスト通知に失敗しました');
+          }
+          return result(true, 'テスト通知を送信しました');
+        } catch (error) {
+          return result(false, 'テスト通知に失敗しました: ' + (error?.message || error));
+        }
+      };
+    })();
+  </script>
+
 </body>
 </html>

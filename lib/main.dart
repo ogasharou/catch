@@ -19,6 +19,7 @@ import 'package:workmanager/workmanager.dart';
 
 import 'cloud_sync.dart';
 import 'web_ocr_stub.dart' if (dart.library.js_interop) 'web_ocr_web.dart';
+import 'web_push_stub.dart' if (dart.library.js_interop) 'web_push_web.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -614,6 +615,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int defaultReminderMinutes = 30;
   bool notificationsReady = false;
 
+  // iPhone / Web PWA push
+  String webPushApiUrl = '';
+  bool webPushSupported = false;
+  bool webPushSubscribed = false;
+  String webPushStatusMessage = 'iPhone通知は未設定です';
+
   bool weatherEnabled = true;
   bool weatherLoading = false;
   String weatherMessage = '現在地の天気を取得します';
@@ -690,6 +697,22 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       notificationsReady = false;
     }
     await loadData();
+
+    if (kIsWeb) {
+      try {
+        webPushSupported = await catchWebPushSupported();
+        final status = await catchWebPushStatus();
+        webPushSubscribed = status == 'granted';
+        webPushStatusMessage = !webPushSupported
+            ? 'この環境ではWeb Pushを使えません'
+            : webPushSubscribed
+                ? 'iPhone通知：許可済み'
+                : 'iPhone通知：未許可';
+      } catch (_) {
+        webPushStatusMessage = 'iPhone通知の状態を確認できませんでした';
+      }
+    }
+
     if (watches.isNotEmpty) selectedWatchKeyword ??= watches.first.keyword;
     await ensureNotificationIds();
     await loadCloudIntegration();
@@ -1293,26 +1316,34 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           .replaceAll('：', ':')
           .trim();
 
-      // Remove leading Teams course code.
-      value = value.replaceFirst(
-        RegExp(r'^[\[【(（]?\s*\d{2,5}\s*[\]】)）]?\s*'),
-        '',
-      );
+      // OCR sometimes joins the Teams action button text onto the app-bar title.
+      // Keep only the course-title side.
+      value = value.split(RegExp(
+        r'(遅れて提出する|提出を取り消す|提出する|戻る|閉じる)',
+      )).first.trim();
 
-      // Remove common year/class suffixes such as "_R08".
-      value = value.replaceFirst(
-        RegExp(r'[_\-\s]+R?\d{1,4}$', caseSensitive: false),
-        '',
-      );
-
-      // OCR often leaves UI ellipsis on the course title.
-      value = value.replaceFirst(RegExp(r'\.{2,}$'), '');
-
-      // Mild normalization only for clearly truncated Japanese words visible
-      // in the Teams app bar.
-      if (value.endsWith('プログラミン')) {
-        value = '${value}グ';
+      // Prefer the text that begins with an explicit Teams class code.
+      final explicitCode = RegExp(
+        r'[\[【(（]\s*(\d{2,5})\s*[\]】)）]\s*(.+)$',
+      ).firstMatch(value);
+      if (explicitCode != null) {
+        value = explicitCode.group(2)!.trim();
+      } else {
+        // Also handle OCR that loses one of the brackets.
+        value = value.replaceFirst(
+          RegExp(r'^[\[【(（]?\s*\d{2,5}\s*[\]】)）]?\s*'),
+          '',
+        );
       }
+
+      // Remove school-year / class suffixes such as "_R08".
+      value = value.replaceFirst(
+        RegExp(r'[_\-\s]+R\d{1,4}$', caseSensitive: false),
+        '',
+      );
+
+      // Remove an ellipsis caused by the narrow Teams app bar.
+      value = value.replaceFirst(RegExp(r'\.{2,}$'), '');
 
       value = value
           .replaceAll(RegExp(r'^[\-_・:：\s]+'), '')
@@ -1324,13 +1355,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
     bool looksLikeCourseCandidate(String raw) {
       final value = cleanTeamsCourseName(raw);
-      if (value.length < 3 || value.length > 60) return false;
+      if (value.length < 2 || value.length > 70) return false;
       if (!RegExp(r'[一-龠ぁ-んァ-ヶA-Za-z]').hasMatch(value)) return false;
 
       if (RegExp(
-        r'(期限|提出|点数|手順|終了日|自分の作業|参考資料|複数回提出|'
-        r'添付|新規|課題名|締切日時|登録先|キャンセル|提出を取り消す|'
-        r'遅れて提出する|提出されていません)',
+        r'(期限|提出しました|提出されていません|点数|手順|終了日|自分の作業|'
+        r'参考資料|複数回提出|添付|新規|課題名|締切日時|登録先|キャンセル)',
       ).hasMatch(value)) {
         return false;
       }
@@ -1341,86 +1371,66 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       ).hasMatch(value)) {
         return false;
       }
-
       return true;
-    }
-
-    int courseScore(String raw, int index) {
-      final value = cleanTeamsCourseName(raw);
-      var score = 0;
-
-      // Teams course names are normally in the very top app bar.
-      if (index <= 2) score += 40;
-      if (index <= 5) score += 15;
-
-      // Explicit Teams course code is extremely strong evidence.
-      if (RegExp(r'^[\[【(（]?\s*\d{2,5}\s*[\]】)）]?').hasMatch(raw)) {
-        score += 45;
-      }
-
-      // Typical school-course words.
-      if (RegExp(
-        r'(実習|基礎|情報|システム|プログラミング|数学|英語|物理|化学|国語|'
-        r'歴史|体育|工学|電気|電子|機械|生産|設計|コース|講義|授業)',
-      ).hasMatch(value)) {
-        score += 20;
-      }
-
-      // Course-like class labels such as 2S-J.
-      if (RegExp(r'\b\d[A-Za-z](?:-[A-Za-z])?\b').hasMatch(value)) {
-        score += 18;
-      }
-
-      // Assignment content is less likely to be a course name.
-      if (RegExp(
-        r'(課題|設計書の作成|夏休み|f-\d|レポート|小テスト|提出物)',
-        caseSensitive: false,
-      ).hasMatch(value)) {
-        score -= 35;
-      }
-
-      return score;
     }
 
     String subject = '';
 
-    // Build candidates from the first several OCR lines. The Teams course
-    // label is visually at the top, so position is important.
-    final courseCandidates = <({String text, int index, int score})>[];
-
-    final topLimit = lines.length < 12 ? lines.length : 12;
-    for (var i = 0; i < topLimit; i++) {
+    // FIRST PRIORITY:
+    // Any OCR line containing a [001]-style Teams class code.
+    // This is much safer than guessing from general course-like words.
+    for (var i = 0; i < lines.length && i < 10; i++) {
       final raw = lines[i];
 
-      // Full line such as:
-      // [001]生産システム実習基礎_R08
-      // [001]2S-J_プログラミン...
-      if (looksLikeCourseCandidate(raw)) {
-        courseCandidates.add((
-          text: cleanTeamsCourseName(raw),
-          index: i,
-          score: courseScore(raw, i),
-        ));
-      }
+      if (RegExp(r'[\[【(（]\s*\d{2,5}\s*[\]】)）]').hasMatch(raw)) {
+        final cleaned = cleanTeamsCourseName(raw);
+        if (looksLikeCourseCandidate(cleaned)) {
+          subject = cleaned;
+          break;
+        }
 
-      // OCR can split "[001]" and course name into separate lines.
-      if (RegExp(r'^[\[【(（]?\s*\d{2,5}\s*[\]】)）]?$').hasMatch(raw) &&
-          i + 1 < topLimit) {
-        final joinedRaw = '$raw ${lines[i + 1]}';
-        final joined = cleanTeamsCourseName(joinedRaw);
-        if (looksLikeCourseCandidate(joined)) {
-          courseCandidates.add((
-            text: joined,
-            index: i,
-            score: courseScore(joinedRaw, i) + 20,
-          ));
+        // OCR can split the code and the course title onto adjacent lines.
+        if (i + 1 < lines.length) {
+          final joined = cleanTeamsCourseName('$raw ${lines[i + 1]}');
+          if (looksLikeCourseCandidate(joined)) {
+            subject = joined;
+            break;
+          }
         }
       }
     }
 
-    if (courseCandidates.isNotEmpty) {
-      courseCandidates.sort((a, b) => b.score.compareTo(a.score));
-      subject = courseCandidates.first.text;
+    // SECOND PRIORITY:
+    // Code may be on one line and subject on the next line.
+    if (subject.isEmpty) {
+      for (var i = 0; i < lines.length - 1 && i < 10; i++) {
+        if (RegExp(r'^[\[【(（]?\s*\d{2,5}\s*[\]】)）]?$')
+            .hasMatch(lines[i])) {
+          final cleaned = cleanTeamsCourseName(lines[i + 1]);
+          if (looksLikeCourseCandidate(cleaned)) {
+            subject = cleaned;
+            break;
+          }
+        }
+      }
+    }
+
+    // LAST RESORT:
+    // Only use a generic top-area candidate if no explicit course code exists.
+    if (subject.isEmpty) {
+      final topLimit = lines.length < 6 ? lines.length : 6;
+      for (var i = 0; i < topLimit; i++) {
+        final cleaned = cleanTeamsCourseName(lines[i]);
+        if (!looksLikeCourseCandidate(cleaned)) continue;
+
+        if (RegExp(
+          r'(実習|基礎|情報|システム|プログラミング|数学|英語|物理|化学|'
+          r'国語|歴史|体育|工学|電気|電子|機械|生産|コース|授業)',
+        ).hasMatch(cleaned)) {
+          subject = cleaned;
+          break;
+        }
+      }
     }
 
     // Teams places the assignment title immediately before the "期限" area.
@@ -1812,6 +1822,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             data['notificationsEnabled'] as bool? ?? true;
         defaultReminderMinutes =
             data['defaultReminderMinutes'] as int? ?? 30;
+        webPushApiUrl =
+            data['webPushApiUrl'] as String? ?? '';
         weatherEnabled = data['weatherEnabled'] as bool? ?? true;
       }
     } catch (_) {
@@ -1850,6 +1862,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           .toList(),
       'notificationsEnabled': notificationsEnabled,
       'defaultReminderMinutes': defaultReminderMinutes,
+      'webPushApiUrl': webPushApiUrl,
       'weatherEnabled': weatherEnabled,
     };
     await preferences.setString(_storageKey, jsonEncode(data));
@@ -1920,6 +1933,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   Future<void> syncAllNotifications() async {
+    if (kIsWeb) {
+      await syncWebPushNotifications();
+      return;
+    }
+
     if (!notificationsReady) return;
 
     await notificationPlugin.cancelAll();
@@ -1945,6 +1963,173 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         typeLabel: '予定',
       );
     }
+  }
+
+
+  List<Map<String, dynamic>> buildWebPushReminderPayload() {
+    if (!notificationsEnabled) return const [];
+
+    final now = DateTime.now();
+    final output = <Map<String, dynamic>>[];
+
+    for (final assignment in assignments) {
+      if (assignment.completed ||
+          assignment.reminderMinutes < 0 ||
+          assignment.notificationId == 0) {
+        continue;
+      }
+
+      final notifyAt = assignment.deadline.subtract(
+        Duration(minutes: assignment.reminderMinutes),
+      );
+      if (!notifyAt.isAfter(now)) continue;
+
+      output.add({
+        'id': 'task:${assignment.notificationId}',
+        'notifyAt': notifyAt.toUtc().toIso8601String(),
+        'title': 'タスクの時間が近づいています',
+        'body': '${assignment.title} ・ ${formatDateTime(assignment.deadline)}',
+        'url': './',
+        'tag': 'catch-task-${assignment.notificationId}',
+      });
+    }
+
+    for (final item in schedules) {
+      if (item.completed ||
+          item.reminderMinutes < 0 ||
+          item.notificationId == 0) {
+        continue;
+      }
+
+      final notifyAt = item.date.subtract(
+        Duration(minutes: item.reminderMinutes),
+      );
+      if (!notifyAt.isAfter(now)) continue;
+
+      output.add({
+        'id': 'schedule:${item.notificationId}',
+        'notifyAt': notifyAt.toUtc().toIso8601String(),
+        'title': '予定の時間が近づいています',
+        'body': '${item.title} ・ ${formatDateTime(item.date)}',
+        'url': './',
+        'tag': 'catch-schedule-${item.notificationId}',
+      });
+    }
+
+    return output;
+  }
+
+  Future<void> syncWebPushNotifications() async {
+    if (!kIsWeb ||
+        webPushApiUrl.trim().isEmpty ||
+        !webPushSubscribed) {
+      return;
+    }
+
+    final result = await catchWebPushSync(
+      webPushApiUrl.trim(),
+      buildWebPushReminderPayload(),
+    );
+
+    if (!result.ok && mounted) {
+      setState(() {
+        webPushStatusMessage =
+            result.message.isEmpty ? 'iPhone通知の同期に失敗しました' : result.message;
+      });
+    }
+  }
+
+  Future<void> configureWebPushServer() async {
+    if (!kIsWeb) return;
+
+    final controller = TextEditingController(text: webPushApiUrl);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('iPhone通知サーバー'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.url,
+          autocorrect: false,
+          decoration: const InputDecoration(
+            labelText: 'Cloudflare Worker URL',
+            hintText: 'https://catch-push.xxxxx.workers.dev',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              controller.text.trim().replaceAll(RegExp(r'/+$'), ''),
+            ),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (value == null || value.isEmpty) return;
+
+    setState(() {
+      webPushApiUrl = value;
+      webPushStatusMessage = '通知サーバーを保存しました';
+    });
+    await saveData();
+  }
+
+  Future<void> enableIphoneWebPush() async {
+    if (!kIsWeb) return;
+
+    if (webPushApiUrl.trim().isEmpty) {
+      await configureWebPushServer();
+      if (webPushApiUrl.trim().isEmpty) return;
+    }
+
+    setState(() => webPushStatusMessage = '通知を有効化しています…');
+
+    final result = await catchWebPushEnable(webPushApiUrl.trim());
+    if (!mounted) return;
+
+    setState(() {
+      webPushSubscribed = result.ok;
+      webPushStatusMessage = result.message;
+    });
+
+    if (result.ok) {
+      await syncWebPushNotifications();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('iPhone通知を有効にしました'),
+        ),
+      );
+    }
+  }
+
+  Future<void> sendWebPushTest() async {
+    if (!kIsWeb || webPushApiUrl.trim().isEmpty || !webPushSubscribed) return;
+
+    setState(() => webPushStatusMessage = 'テスト通知を送信中…');
+    final result = await catchWebPushTest(webPushApiUrl.trim());
+    if (!mounted) return;
+
+    setState(() {
+      webPushStatusMessage = result.message;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.ok ? 'テスト通知を送信しました' : result.message,
+        ),
+      ),
+    );
   }
 
   Future<void> scheduleReminder({
@@ -3879,21 +4064,61 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ),
               ),
               const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.notifications_active_outlined),
-                title: const Text('テスト通知を送る'),
-                subtitle: const Text('Android端末で通知許可を確認できます'),
-                enabled: notificationsEnabled && notificationsReady,
-                onTap: notificationsEnabled && notificationsReady
-                    ? () async {
-                        await showTestNotification();
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('テスト通知を送りました')),
-                        );
-                      }
-                    : null,
-              ),
+              if (kIsWeb) ...[
+                ListTile(
+                  leading: const Icon(Icons.phone_iphone),
+                  title: const Text('iPhone通知を有効にする'),
+                  subtitle: Text(webPushStatusMessage),
+                  enabled: notificationsEnabled && webPushSupported,
+                  onTap: notificationsEnabled && webPushSupported
+                      ? enableIphoneWebPush
+                      : null,
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.notifications_active_outlined),
+                  title: const Text('テスト通知を送る'),
+                  subtitle: const Text('Catchを閉じた状態でも届くか確認'),
+                  enabled: notificationsEnabled &&
+                      webPushSupported &&
+                      webPushSubscribed &&
+                      webPushApiUrl.trim().isNotEmpty,
+                  onTap: notificationsEnabled &&
+                          webPushSupported &&
+                          webPushSubscribed &&
+                          webPushApiUrl.trim().isNotEmpty
+                      ? sendWebPushTest
+                      : null,
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.dns_outlined),
+                  title: const Text('通知サーバー設定'),
+                  subtitle: Text(
+                    webPushApiUrl.trim().isEmpty
+                        ? '未設定'
+                        : webPushApiUrl,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: configureWebPushServer,
+                ),
+              ] else
+                ListTile(
+                  leading: const Icon(Icons.notifications_active_outlined),
+                  title: const Text('テスト通知を送る'),
+                  subtitle: const Text('Android端末で通知許可を確認できます'),
+                  enabled: notificationsEnabled && notificationsReady,
+                  onTap: notificationsEnabled && notificationsReady
+                      ? () async {
+                          await showTestNotification();
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('テスト通知を送りました')),
+                          );
+                        }
+                      : null,
+                ),
             ],
           ),
         ),
@@ -3983,7 +4208,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
         Center(
           child: Text(
-            'Catch v0.40',
+            'Catch v0.42',
             style: TextStyle(
               color: Colors.grey.shade600,
             ),

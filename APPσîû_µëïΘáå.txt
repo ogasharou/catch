@@ -1,0 +1,35 @@
+Catch v0.35 無料アプリ化
+
+【Android】
+1. install_v0_35.ps1 を実行
+2. build_android_app.ps1 を実行
+3. Downloads の Catch.apk をAndroidへ送ってインストール
+
+【iPhone：完全無料・7日再署名なし】
+PWAとして使います。
+
+1. Catch_v0_35 フォルダの中身をGitHubリポジトリへアップロード
+2. GitHub → Settings → Pages
+3. Build and deployment の Source を「GitHub Actions」にする
+4. GitHub → Actions → Deploy Catch PWA → Run workflow
+5. 完了するとGitHub Pages URLが表示される
+6. iPhoneのSafariでURLを開く
+7. 共有ボタン →「ホーム画面に追加」
+8. Catchアイコンから起動
+
+【Web/PWA版の天気】
+使えます。
+Safariから位置情報の許可を求められたら許可してください。
+GitHub PagesはHTTPSなので位置情報を利用できます。
+
+【iPhoneのスクショCatch】
+スクショを選択 → OCR → 名前/カテゴリ/日時を推定
+→ 必ず確認画面 → 必要なら修正 → 保存
+
+注意:
+- iPhone PWAではAndroidのような他アプリ上の浮遊ボタンは使えません。
+- iOSの制限でバックグラウンド処理・通知にはネイティブアプリより制限があります。
+
+
+【v0.35 Web OCR】
+iPhone PWAの「スクショからCatch」はブラウザOCR対応です。初回のみOCR言語データ読み込みで少し時間がかかる場合があります。

@@ -9,7 +9,7 @@ if (-not (Test-Path (Join-Path $ProjectPath "pubspec.yaml"))) {
   throw "Flutter project not found: $ProjectPath"
 }
 
-$BackupPath = Join-Path $ProjectPath ("catch_backup_v0_40_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
+$BackupPath = Join-Path $ProjectPath ("catch_backup_v0_42_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
 New-Item -ItemType Directory -Path $BackupPath | Out-Null
 
 # Backup current source/config
@@ -86,7 +86,7 @@ flutter clean
 flutter pub get
 
 Write-Host ""
-Write-Host "Catch v0.40 install complete." -ForegroundColor Green
+Write-Host "Catch v0.42 install complete." -ForegroundColor Green
 Write-Host "- Calendar + magnifying-glass APP icon installed" -ForegroundColor Green
 Write-Host "- Bottom task/calendar/watch tab icons were NOT changed" -ForegroundColor Green
 Write-Host "- Calendar weather: current-location forecast with no API key" -ForegroundColor Green

@@ -1,0 +1,16 @@
+{
+  "name": "catch-free-push",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "keys": "node generate-vapid.mjs"
+  },
+  "dependencies": {
+    "@mmmike/web-push": "^1.3.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  }
+}
