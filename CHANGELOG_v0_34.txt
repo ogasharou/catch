@@ -1,7 +1,0 @@
-Catch v0.34 Free iPhone PWA
-- iPhone/Safari installable PWA support
-- Free GitHub Pages deployment workflow
-- Web/PWA weather via browser geolocation
-- iPhone screenshot OCR + confirmation retained
-- Android APK build retained
-- v0.33 Android release/R8 fix retained

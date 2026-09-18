@@ -617,10 +617,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   Future<void> startTeamsScreenCapture() async {
     if (kIsWeb) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('画面CatchはAndroid / iPhoneアプリで利用できます')),
-      );
+      await startIosScreenshotCatch();
       return;
     }
 
@@ -796,7 +793,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   Future<EventDateMatch?> extractBestDateWithAi(String text) async {
     if (text.trim().isEmpty) return null;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    if (kIsWeb || defaultTargetPlatform == TargetPlatform.iOS) {
       final parsed = extractDeadlineFromText(text);
       if (parsed == null) return null;
       return EventDateMatch(
@@ -1832,7 +1829,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS)
+                        (kIsWeb || defaultTargetPlatform == TargetPlatform.iOS)
                             ? 'スクショからCatch'
                             : '画面からCatch',
                         style: TextStyle(
@@ -1842,7 +1839,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       ),
                       SizedBox(height: 3),
                       Text(
-                        (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS)
+                        (kIsWeb || defaultTargetPlatform == TargetPlatform.iOS)
                             ? 'スクショから名前・カテゴリ・日時を推定し、確認してから追加します'
                             : '他のアプリの画面から、課題名・予定・日時を1画面だけ読み取ります',
                         style: TextStyle(fontSize: 12),
@@ -1854,7 +1851,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 FilledButton.tonal(
                   onPressed: teamsCaptureStarting
                       ? null
-                      : ((!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS)
+                      : ((kIsWeb || defaultTargetPlatform == TargetPlatform.iOS)
                           ? startIosScreenshotCatch
                           : startTeamsScreenCapture),
                   child: teamsCaptureStarting
@@ -1864,7 +1861,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : Text(
-                          (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS)
+                          (kIsWeb || defaultTargetPlatform == TargetPlatform.iOS)
                               ? '画像を選ぶ'
                               : '開始',
                         ),
@@ -3678,7 +3675,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
         Center(
           child: Text(
-            'Catch v0.35',
+            'Catch v0.36',
             style: TextStyle(
               color: Colors.grey.shade600,
             ),
